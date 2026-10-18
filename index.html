@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>RECON RUNNER</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace}
+body{background:#0a0a0a;color:#e0e0e0;overflow:hidden;touch-action:none}
+#game{width:100vw;height:100vh;display:block;background:#0a0a0a}
+#hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;pointer-events:none;z-index:10}
+#score{font-weight:900;font-size:18px!important}
+#title{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0a;z-index:20;text-align:center;padding:20px}
+#title pre{font-size:10px;line-height:1.1;color:#fff;margin-bottom:20px}
+#title p{color:#666;font-size:12px;margin-bottom:24px;max-width:280px;line-height:1.4}
+button{background:#fff;color:#000;border:none;padding:12px 28px;font-weight:900;letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+#controls{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#1a1a1a;z-index:10;height:90px}
+#controls div{display:flex;align-items:center;justify-content:center;background:#0a0a0a;color:#444;font-size:10px}
+#controls div:active{background:#fff;color:#000}
+@media(min-width:700px){#controls{display:none}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"><div id="score">0</div><div id="best">best 0</div></div>
+<div id="title">
+<pre>
+ █▀█ █▀▀ █▀▀ █▀█ █▄░█
+ █▀▄ █▄▄ █▄▄ █▄█ █░▀█
+ █▀█ █ █ █▄░█ █▄░█ █▀▀ █▀█
+ █▀▄ █ █ █░▀█ █░▀█ ██▄ █▀▄
+</pre>
+<h1 style="font-size:14px;letter-spacing:4px;margin-bottom:12px">RECON RUNNER</h1>
+<p>grimm minimal subway clone<br>swipe or arrows to move<br>up/space = jump, down = roll</p>
+<button id="play">RUN</button>
+</div>
+<div id="controls"><div id="c-left">← LEFT</div><div id="c-up">JUMP / ROLL</div><div id="c-right">RIGHT →</div></div>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W,H,DPR=window.devicePixelRatio||1;
+function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);resize();
+let targetLane=0,laneX=0,y=0,vy=0,jumping=false,rolling=false,rollT=0,speed=8,score=0,best=parseInt(localStorage.getItem('recon_best')||'0'),obstacles=[],coins=[],dead=false,running=false,time=0,lastSpawnZ=0;
+function reset(){targetLane=0;laneX=0;y=0;vy=0;jumping=false;rolling=false;rollT=0;speed=8;score=0;obstacles=[];coins=[];dead=false;time=0;lastSpawnZ=0;for(let i=0;i<8;i++)spawn(i*350+500)}
+function spawn(z){const lane=Math.floor(Math.random()*3)-1;if(Math.random()<0.65){obstacles.push({z,lane,type:Math.random()<0.5?'block':'low',h:Math.random()<0.3?62:38})}else{coins.push({z:z+Math.random()*80,lane,taken:false})}}
+function inputLane(d){if(dead)return;targetLane=Math.max(-1,Math.min(1,targetLane+d))}
+function jump(){if(!jumping&&!rolling){jumping=true;vy=-15}}
+function roll(){if(!jumping){rolling=true;rollT=0.55}}
+function loop(){if(!running)return;time+=0.016;laneX+=(targetLane*120-laneX)*0.14;if(jumping){y+=vy;vy+=0.85;if(y>=0){y=0;jumping=false;vy=0}}if(rolling){rollT-=0.016;if(rollT<=0)rolling=false}speed+=0.0025;score+=speed*0.12;lastSpawnZ+=speed;if(lastSpawnZ>230){lastSpawnZ=0;spawn(time*speed+900)}for(let o of obstacles)o.z-=speed;obstacles=obstacles.filter(o=>o.z>-120);for(let c of coins){c.z-=speed;if(!c.taken&&Math.abs(c.z-65)<28&&c.lane===targetLane&&Math.abs(y)<12){c.taken=true;score+=75}}coins=coins.filter(c=>c.z>-120&&!c.taken);for(let o of obstacles){if(Math.abs(o.z-65)<26&&o.lane===targetLane){if(o.type==='block'){if(Math.abs(y)<2&&!rolling)die()}else{if(!rolling)die()}}}draw();if(!dead)requestAnimationFrame(loop)}
+function die(){dead=true;running=false;best=Math.max(best,Math.floor(score));localStorage.setItem('recon_best',best);document.getElementById('title').style.display='flex';document.getElementById('play').textContent='RUN AGAIN — '+Math.floor(score)}
+function draw(){ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,W,H);const horizon=H*0.28,cx=W/2;ctx.strokeStyle='#181818';ctx.lineWidth=1;for(let i=-1;i<=1;i++){const lc=cx+i*120+laneX*0.2;ctx.beginPath();ctx.moveTo(lc,horizon);ctx.lineTo(cx+(i*360+laneX),H);ctx.stroke()}ctx.strokeStyle='#141414';for(let z=0;z<900;z+=42){const p=(z+(time*speed)%42)/900,yy=horizon+Math.pow(p,1.8)*(H-horizon);ctx.beginPath();ctx.moveTo(cx-320*p-laneX*p*0.2,yy);ctx.lineTo(cx+320*p-laneX*p*0.2,yy);ctx.stroke()}function w2s(z,lo){const p=Math.max(0,Math.min(1,1-z/850)),yy=horizon+Math.pow(p,1.7)*(H-horizon),s=0.18+p*0.92,xx=cx+(lo*120+laneX)*(s*1.15);return{x:xx,y:yy,s}}for(let c of coins){const pt=w2s(c.z,c.lane);if(pt.y<horizon)continue;ctx.fillStyle='#fff';ctx.fillRect(pt.x-3*pt.s,pt.y-6*pt.s,6*pt.s,6*pt.s)}for(let o of obstacles){const pt=w2s(o.z,o.lane);if(pt.y<horizon)continue;const h=o.h*pt.s,w=74*pt.s;if(o.type==='block'){ctx.fillStyle='#fff';ctx.fillRect(pt.x-w/2,pt.y-h,w,h);ctx.fillStyle='#0a0a0a';ctx.fillRect(pt.x-w/2,pt.y-h*0.5,w,2)}else{ctx.fillStyle='#2a2a2a';ctx.fillRect(pt.x-w/2,pt.y-13*pt.s,w,13*pt.s);ctx.fillStyle='#fff';ctx.fillRect(pt.x-w/2,pt.y-15*pt.s,w,2.5*pt.s)}}const px=cx+laneX,py=H-96;ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fillRect(px-14,py+18,28,4);ctx.save();ctx.translate(px,py+y);let h=38,ww=18;if(rolling){h=18;ctx.translate(0,12)}ctx.fillStyle='#fff';ctx.fillRect(-ww/2,-h,ww,h);ctx.restore();document.getElementById('score').textContent=Math.floor(score);document.getElementById('best').textContent='best '+best}
+function start(){document.getElementById('title').style.display='none';reset();running=true;dead=false;requestAnimationFrame(loop)}
+document.getElementById('play').onclick=start;
+addEventListener('keydown',e=>{if(e.code==='ArrowLeft'||e.code==='KeyA')inputLane(-1);if(e.code==='ArrowRight'||e.code==='KeyD')inputLane(1);if(e.code==='ArrowUp'||e.code==='Space'||e.code==='KeyW')jump();if(e.code==='ArrowDown'||e.code==='KeyS')roll()});
+let sx=0,sy=0;canvas.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY});canvas.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>Math.abs(dy)){if(dx>30)inputLane(1);else if(dx<-30)inputLane(-1)}else{if(dy<-30)jump();else if(dy>30)roll()}});document.getElementById('c-left').onclick=()=>inputLane(-1);document.getElementById('c-right').onclick=()=>inputLane(1);document.getElementById('c-up').onclick=()=>jump();draw();
+</script>
+</body>
+</html>
